@@ -75,7 +75,14 @@ public class UrlAccess1Admin extends HttpServlet {
 
       try {
         String userData = request.getParameter("userData");
-        boolean tamperedRequest = !userData.equalsIgnoreCase("4816283");
+        // Authorisation check: this is an administrative function. Knowing its URL is not
+        // authorisation, so the caller must hold this level's administrator role, which is only
+        // ever granted server side. Unauthorised callers are refused.
+        boolean levelAdmin = Boolean.TRUE.equals(ses.getAttribute("urlAccess1LevelAdmin"));
+        if (!levelAdmin) {
+          log.error("Unauthorised call to admin function by " + ses.getAttribute("userName"));
+        }
+        boolean tamperedRequest = !levelAdmin || !"4816283".equalsIgnoreCase(userData);
         if (!tamperedRequest) {
           log.debug("No request tampering detected");
         } else {

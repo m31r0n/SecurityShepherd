@@ -837,7 +837,10 @@ INSERT INTO `CryptShop`.`coupons` (`couponId`, `perCentOff`, `couponCode`, `item
 INSERT INTO `CryptShop`.`coupons` (`couponId`, `perCentOff`, `couponCode`, `itemId`) VALUES (4, 50, 'HalfOffOranges', 2);
 INSERT INTO `CryptShop`.`coupons` (`couponId`, `perCentOff`, `couponCode`, `itemId`) VALUES (5, 10, 'PleaseTakeABanana', 4);
 INSERT INTO `CryptShop`.`coupons` (`couponId`, `perCentOff`, `couponCode`, `itemId`) VALUES (6, 50, 'HalfOffBananas', 4);
-INSERT INTO `CryptShop`.`coupons` (`couponId`, `perCentOff`, `couponCode`, `itemId`) VALUES (432197, 100, 'e!c!3etZoumo@Stu4rU176', 2);
+-- The previous secret coupon was shipped to every browser inside couponCheck.js (DES encrypted with
+-- the key alongside it), so it is compromised. It is rotated to a random value generated when the
+-- schema is created, and coupon codes are now only ever validated server side.
+INSERT INTO `CryptShop`.`coupons` (`couponId`, `perCentOff`, `couponCode`, `itemId`) VALUES (432197, 100, SHA2(CONCAT(UUID(), RAND(), NOW(6)), 256), 2);
 COMMIT;
 
 -- -----------------------------------------------------
@@ -1169,7 +1172,8 @@ USE `SqlChalStoredProc`;
 CREATE PROCEDURE `SqlChalStoredProc`.`findUser` (IN theAddress VARCHAR(128))
 BEGIN
 COMMIT;
-SELECT * FROM customers WHERE customerAddress = theAddress;
+-- Only public profile fields are returned. Private customer comments are never exposed
+SELECT customerName, customerAddress FROM customers WHERE customerAddress = theAddress;
 END
 ;
 -- $$

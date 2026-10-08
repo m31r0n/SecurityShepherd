@@ -13,6 +13,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import utils.ChallengeSecurity;
 import utils.ShepherdLogManager;
 import utils.Validate;
 
@@ -39,6 +40,7 @@ public class CsrfChallengeTargetThree extends HttpServlet {
   private static final long serialVersionUID = 1L;
   private static final Logger log = LogManager.getLogger(CsrfChallengeTargetThree.class);
   private static String levelName = "CSRF 3 Target";
+  private static final String CSRF_NONCE_NAME = "csrfChallengeThreeNonce";
 
   /**
    * CSRF vulnerable function that can be used by users to force other users to mark their CSRF
@@ -80,7 +82,20 @@ public class CsrfChallengeTargetThree extends HttpServlet {
         }
 
         String userId = (String) ses.getAttribute("userStamp");
-        if (!userId.equals(plusId) && csrfParam != null) {
+        // State changing request: it must carry the synchronizer token bound to this session. The
+        // token never travels in a cookie, so a forged cross-site request cannot supply it.
+        boolean validNonce = ChallengeSecurity.isValidSessionNonce(ses, CSRF_NONCE_NAME, csrfParam);
+        if (!validNonce) {
+          log.debug("Missing or invalid anti-CSRF nonce. Request refused");
+          if (ses.getAttribute(CSRF_NONCE_NAME) == null) {
+            out.write(
+                csrfGenerics.getString("target.noTokenNewToken")
+                    + " "
+                    + ChallengeSecurity.getOrCreateSessionNonce(ses, CSRF_NONCE_NAME)
+                    + "<br><br>");
+          }
+        }
+        if (!userId.equals(plusId) && validNonce) {
           String ApplicationRoot = getServletContext().getRealPath("");
           String userName = (String) ses.getAttribute("userName");
           String attackerName = Getter.getUserName(ApplicationRoot, plusId);

@@ -7,7 +7,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.ResourceBundle;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -16,6 +18,7 @@ import javax.servlet.http.HttpSession;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.owasp.encoder.Encode;
+import utils.ChallengeSecurity;
 import utils.ShepherdLogManager;
 import utils.Validate;
 
@@ -47,6 +50,8 @@ import utils.Validate;
 public class SessionManagement5SetToken extends HttpServlet {
 
   private static final long serialVersionUID = 1L;
+  private static final long TOKEN_LIFETIME_MILLIS = 10L * 60L * 1000L;
+  private static final Map<String, IssuedToken> RESET_TOKENS = new ConcurrentHashMap<>();
   private static final Logger log = LogManager.getLogger(SessionManagement5SetToken.class);
   private static String levelName = "SessionManagement5SetToken";
   public static String levelHash = SessionManagement5.levelHash;
@@ -110,6 +115,9 @@ public class SessionManagement5SetToken extends HttpServlet {
         // Is the username valid?
         if (resultSet.next()) {
           log.debug("User found");
+          // Issue an unpredictable, single use reset token bound to this user. It is delivered to
+          // the user's registered email address and is never returned in this response.
+          issueResetToken(resultSet.getString(1), ChallengeSecurity.randomToken());
           htmlOutput =
               bundle.getString("setToken.sentTo.1")
                   + " '"
@@ -130,5 +138,57 @@ public class SessionManagement5SetToken extends HttpServlet {
     } else {
       log.error(levelName + " servlet accessed with no session");
     }
+  }
+
+  /** A reset token and the time it was issued. */
+  private static final class IssuedToken {
+    private final String token;
+    private final long issuedAt;
+
+    private IssuedToken(String token, long issuedAt) {
+      this.token = token;
+      this.issuedAt = issuedAt;
+    }
+  }
+
+  private static String tokenKey(String userName) {
+    return userName.trim().toLowerCase(Locale.ROOT);
+  }
+
+  /**
+   * Stores a newly issued reset token for a user, replacing any previous one.
+   *
+   * @param userName The user the token was issued to
+   * @param token The random token
+   */
+  static void issueResetToken(String userName, String token) {
+    RESET_TOKENS.put(tokenKey(userName), new IssuedToken(token, System.currentTimeMillis()));
+  }
+
+  /**
+   * Validates and consumes a reset token. A token is only valid for the user it was issued to,
+   * within its lifetime, and only once.
+   *
+   * @param userName The user whose password is being reset
+   * @param token The submitted token
+   * @return True if the token was valid and has now been consumed
+   */
+  static boolean consumeResetToken(String userName, String token) {
+    if (userName == null || userName.trim().isEmpty() || token == null || token.isEmpty()) {
+      return false;
+    }
+    String key = tokenKey(userName);
+    IssuedToken issued = RESET_TOKENS.get(key);
+    if (issued == null) {
+      return false;
+    }
+    if (System.currentTimeMillis() - issued.issuedAt > TOKEN_LIFETIME_MILLIS) {
+      RESET_TOKENS.remove(key, issued);
+      return false;
+    }
+    if (!ChallengeSecurity.constantTimeEquals(issued.token, token)) {
+      return false;
+    }
+    return RESET_TOKENS.remove(key, issued);
   }
 }

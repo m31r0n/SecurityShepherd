@@ -81,9 +81,23 @@ public class DirectObjectBankTransfer extends HttpServlet {
         log.debug("Transfer Amount - " + transferAmountString);
         float tranferAmount = Float.parseFloat(transferAmountString);
 
+        // Authorisation: funds may only be sent from the account this session signed in to. The
+        // sender account number submitted by the client is never trusted on its own.
+        Object signedInAccount = ses.getAttribute("directObjectBankAccount");
+        boolean ownsSenderAccount =
+            signedInAccount != null
+                && senderAccountNumber != null
+                && signedInAccount.toString().equals(senderAccountNumber.trim());
+
         // Data Validation
-        // Positive Transfer Amount?
-        if (tranferAmount > 0) {
+        if (!ownsSenderAccount) {
+          log.error(
+              "Transfer refused: sender account "
+                  + senderAccountNumber
+                  + " is not the account signed in to by this session");
+          errorMessage = bundle.getString("transfer.error.notYourAccount");
+        } else if (tranferAmount > 0) {
+          // Positive Transfer Amount
           // Sender Account Has necessary funds?
           long senderFunds =
               DirectObjectBankLogin.getAccountBalance(senderAccountNumber, applicationRoot);

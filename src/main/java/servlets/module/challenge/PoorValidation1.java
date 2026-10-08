@@ -66,13 +66,15 @@ public class PoorValidation1 extends HttpServlet {
       out.print(getServletInfo());
       String htmlOutput = new String();
       try {
-        int pineappleAmount = Integer.parseInt(request.getParameter("pineappleAmount"));
+        // Server side validation: every amount must be a whole number between 0 and the maximum
+        // order size. Negative amounts previously produced negative costs and free items.
+        int pineappleAmount = validateAmount(request.getParameter("pineappleAmount"));
         log.debug("pineappleAmount - " + pineappleAmount);
-        int orangeAmount = Integer.parseInt(request.getParameter("orangeAmount"));
+        int orangeAmount = validateAmount(request.getParameter("orangeAmount"));
         log.debug("orangeAmount - " + orangeAmount);
-        int appleAmount = Integer.parseInt(request.getParameter("appleAmount"));
+        int appleAmount = validateAmount(request.getParameter("appleAmount"));
         log.debug("appleAmount - " + appleAmount);
-        int bananaAmount = Integer.parseInt(request.getParameter("bananaAmount"));
+        int bananaAmount = validateAmount(request.getParameter("bananaAmount"));
         log.debug("bananaAmount - " + bananaAmount);
 
         // Working out costs
@@ -121,5 +123,21 @@ public class PoorValidation1 extends HttpServlet {
     } else {
       log.error(levelName + " servlet accessed with no session");
     }
+  }
+
+  /**
+   * Parses and validates an item amount. Anything that is not a whole number between 0 and 9000 is
+   * rejected.
+   *
+   * @param amount The submitted amount
+   * @return The validated amount
+   * @throws IllegalArgumentException If the amount is invalid
+   */
+  private static int validateAmount(String amount) {
+    int value = Integer.parseInt(amount.trim());
+    if (value < 0 || value > 9000) {
+      throw new IllegalArgumentException("Invalid item amount: " + value);
+    }
+    return value;
   }
 }

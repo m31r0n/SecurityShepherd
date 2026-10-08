@@ -92,7 +92,13 @@ public class SessionManagement8 extends HttpServlet {
         if (theCookie != null) {
           log.debug("Cookie value: " + theCookie.getValue());
 
-          if (theCookie.getValue().equals("nmHqLjQknlHs")) {
+          // The role cookie is client controlled, so it is only honoured when it matches the role
+          // held server side in the session. Changing the cookie no longer changes privileges.
+          String serverSideRole = getServerSideRole(ses);
+          if (!theCookie.getValue().equals(serverSideRole)) {
+            log.debug("Tampered role cookie detected: " + theCookie.getValue());
+            htmlOutput += "<!-- " + bundle.getString("response.invalidRole") + " -->";
+          } else if (serverSideRole.equals("nmHqLjQknlHs")) {
             log.debug("Super User Cookie detected");
             // Get key and add it to the output
             String userKey =
@@ -165,5 +171,21 @@ public class SessionManagement8 extends HttpServlet {
       out.write(errors.getString("error.funky"));
       log.fatal(levelName + " - " + e.toString());
     }
+  }
+
+  /**
+   * Returns the role assigned to the user for this level. It is stored in the server side session
+   * and defaults to the standard (unprivileged) role.
+   *
+   * @param ses The user's session
+   * @return The server side role value
+   */
+  private static String getServerSideRole(HttpSession ses) {
+    Object role = ses.getAttribute("sessionManagement8Role");
+    if (role == null) {
+      ses.setAttribute("sessionManagement8Role", "LmH6nmbC");
+      return "LmH6nmbC";
+    }
+    return role.toString();
   }
 }

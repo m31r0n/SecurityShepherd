@@ -94,7 +94,14 @@ public class UrlAccess3 extends HttpServlet {
           String decodedCookie = new String(decodedCookieBytes, "UTF-8");
           log.debug("Decoded Cookie: " + decodedCookie);
 
-          if (decodedCookie.equals("MrJohnReillyTheSecond")) {
+          // The identity of the current user is held server side. The client controlled
+          // "currentPerson" cookie is only honoured when it matches that identity, so it can not
+          // be changed to impersonate a privileged user.
+          String serverSideUser = getServerSideUser(ses);
+          if (!decodedCookie.equals(serverSideUser)) {
+            log.debug("Tampered role cookie detected: " + decodedCookie);
+            htmlOutput = "<!-- " + bundle.getString("response.invalidUser") + " -->";
+          } else if (serverSideUser.equals("MrJohnReillyTheSecond")) {
             log.debug("Super Admin Cookie detected");
             // Get key and add it to the output
             String userKey =
@@ -173,5 +180,21 @@ public class UrlAccess3 extends HttpServlet {
       out.write(errors.getString("error.funky"));
       log.fatal(levelName + " - " + e.toString());
     }
+  }
+
+  /**
+   * Returns the identity of the user for this level, stored in the server side session. Users are
+   * signed in as the guest identity.
+   *
+   * @param ses The user's session
+   * @return The server side identity
+   */
+  private static String getServerSideUser(HttpSession ses) {
+    Object user = ses.getAttribute("urlAccess3CurrentPerson");
+    if (user == null) {
+      ses.setAttribute("urlAccess3CurrentPerson", "aGuest");
+      return "aGuest";
+    }
+    return user.toString();
   }
 }

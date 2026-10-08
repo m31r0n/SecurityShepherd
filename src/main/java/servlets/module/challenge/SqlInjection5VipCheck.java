@@ -76,12 +76,12 @@ public class SqlInjection5VipCheck extends HttpServlet {
         Connection conn =
             Database.getChallengeConnection(applicationRoot, "SqlInjectionChallenge5ShopVipCoupon");
         log.debug("Looking for VipCoupons Insecurely");
+        // Parameterised query: the coupon code is bound as data, never concatenated
         PreparedStatement prepstmt =
             conn.prepareStatement(
                 "SELECT itemId, perCentOff, itemName FROM vipCoupons JOIN items USING (itemId)"
-                    + " WHERE couponCode = '"
-                    + couponCode
-                    + "';");
+                    + " WHERE couponCode = ?");
+        prepstmt.setString(1, couponCode);
         ResultSet coupons = prepstmt.executeQuery();
         try {
           if (coupons.next()) {

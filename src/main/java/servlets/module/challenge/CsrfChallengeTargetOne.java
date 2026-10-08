@@ -13,6 +13,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import utils.ChallengeSecurity;
 import utils.ShepherdLogManager;
 import utils.Validate;
 
@@ -39,6 +40,7 @@ public class CsrfChallengeTargetOne extends HttpServlet {
   private static final long serialVersionUID = 1L;
   private static final Logger log = LogManager.getLogger(CsrfChallengeTargetOne.class);
   private static String levelName = "CSRF 1 Target";
+  private static final String CSRF_NONCE_NAME = "csrfChallengeOneNonce";
 
   /**
    * CSRF vulnerable function that can be used by users to force other users to mark their CSRF
@@ -72,7 +74,22 @@ public class CsrfChallengeTargetOne extends HttpServlet {
         String plusId = request.getParameter("userid");
         log.debug("User Submitted - " + plusId);
         String userId = (String) ses.getAttribute("userStamp");
-        if (!userId.equals(plusId)) {
+        // State changing request: it must carry the synchronizer token bound to this session. The
+        // token never travels in a cookie, so a forged cross-site request cannot supply it.
+        boolean validNonce =
+            ChallengeSecurity.isValidSessionNonce(
+                ses, CSRF_NONCE_NAME, request.getParameter("csrfToken"));
+        if (!validNonce) {
+          log.debug("Missing or invalid anti-CSRF nonce. Request refused");
+          if (ses.getAttribute(CSRF_NONCE_NAME) == null) {
+            out.write(
+                csrfGenerics.getString("target.noTokenNewToken")
+                    + " "
+                    + ChallengeSecurity.getOrCreateSessionNonce(ses, CSRF_NONCE_NAME)
+                    + "<br><br>");
+          }
+        }
+        if (validNonce && !userId.equals(plusId)) {
           String ApplicationRoot = getServletContext().getRealPath("");
           String userName = (String) ses.getAttribute("userName");
           String attackerName = Getter.getUserName(ApplicationRoot, plusId);

@@ -4,9 +4,9 @@ import dbProcs.Database;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import javax.servlet.ServletException;
@@ -86,11 +86,13 @@ public class SqlInjectionEmail extends HttpServlet {
 
           log.debug("Getting Connection to Database");
           Connection conn = Database.getChallengeConnection(ApplicationRoot, "SqlChallengeEmail");
-          Statement stmt = conn.createStatement();
+          // Parameterised query: a syntactically valid email address can still contain SQL, so
+          // the value is bound as data instead of being concatenated into the statement
+          PreparedStatement stmt =
+              conn.prepareStatement("SELECT * FROM customers WHERE customerAddress = ?");
+          stmt.setString(1, userIdentity);
           log.debug("Gathering result set");
-          ResultSet resultSet =
-              stmt.executeQuery(
-                  "SELECT * FROM customers WHERE customerAddress = '" + userIdentity + "'");
+          ResultSet resultSet = stmt.executeQuery();
 
           int i = 0;
           htmlOutput = "<h2 class='title'>" + bundle.getString("response.searchResults") + "</h2>";

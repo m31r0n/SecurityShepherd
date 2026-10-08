@@ -93,7 +93,13 @@ public class SessionManagement1 extends HttpServlet {
           String decodedCookie = new String(decodedCookieBytes, "UTF-8");
           log.debug("Decoded Cookie: " + decodedCookie);
 
-          if (decodedCookie.equals("userRole=administrator")) {
+          // The checksum cookie is client controlled and carries no integrity protection, so it
+          // is never trusted for authorisation. The role is held server side in the session and
+          // the cookie is only honoured when it matches that server side role.
+          String serverSideRole = getServerSideRole(ses);
+          if (!decodedCookie.equals("userRole=" + serverSideRole)) {
+            log.error("Tampered role cookie detected: " + decodedCookie);
+          } else if (serverSideRole.equals("administrator")) {
             log.debug("Challenge Complete");
             // Get key and add it to the output
             String userKey =
@@ -151,5 +157,21 @@ public class SessionManagement1 extends HttpServlet {
       out.write(errors.getString("error.funky"));
       log.fatal(levelName + " - " + e.toString());
     }
+  }
+
+  /**
+   * Returns the role assigned to the user for this level. It is stored in the server side session
+   * and defaults to the unprivileged "user" role.
+   *
+   * @param ses The user's session
+   * @return The server side role
+   */
+  private static String getServerSideRole(HttpSession ses) {
+    Object role = ses.getAttribute("sessionManagement1Role");
+    if (role == null) {
+      ses.setAttribute("sessionManagement1Role", "user");
+      return "user";
+    }
+    return role.toString();
   }
 }

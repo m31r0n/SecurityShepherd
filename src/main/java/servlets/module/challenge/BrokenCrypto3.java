@@ -2,8 +2,15 @@ package servlets.module.challenge;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.ResourceBundle;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -41,8 +48,10 @@ public class BrokenCrypto3 extends HttpServlet {
   private static String levelName = "Broken Crypto Challenge 3";
   public static String levelHash =
       "2da053b4afb1530a500120a49a14d422ea56705a7e3fc405a77bc269948ccae1";
-  public static String levelResult =
-      "thisisthesecurityshepherdabcencryptionkey"; // Is used as encryption key in this level
+  private static final int GCM_IV_LENGTH = 12;
+  private static final int GCM_TAG_BITS = 128;
+  private static final SecureRandom RANDOM = new SecureRandom();
+  private static final SecretKey ENCRYPTION_KEY = generateKey();
 
   public void doPost(HttpServletRequest request, HttpServletResponse response)
       throws ServletException, IOException {
@@ -72,8 +81,8 @@ public class BrokenCrypto3 extends HttpServlet {
         log.debug("User Submitted - " + userData);
 
         log.debug("Decrypting user input");
-        // Using level key as encryption key
-        String decryptedUserData = decrypt(userData, levelResult);
+        // Authenticated decryption with a server side key that is unrelated to the level result
+        String decryptedUserData = decrypt(userData);
         log.debug("Decrypted to: " + decryptedUserData);
 
         htmlOutput =
@@ -95,40 +104,59 @@ public class BrokenCrypto3 extends HttpServlet {
   }
 
   /**
-   * Decrypts the supplied string value using the submitted key
+   * Encrypts the supplied plain text with AES-GCM using a randomly generated server side key. The
+   * key is independent of the level result and never leaves the server.
    *
-   * @param hash The cipher text to be decrypted
-   * @param key The encryption key
-   * @return The plain text revealed from the decryption
-   * @throws Exception Throws illegal state Exception
+   * @param plainText Text to encrypt
+   * @return Base64 encoded IV and authenticated cipher text
+   * @throws Exception If encryption fails
    */
-  public static String decrypt(String hash, String key) throws Exception {
-    try {
-      return new String(
-          xor(org.apache.commons.codec.binary.Base64.decodeBase64(hash.getBytes()), key), "UTF-8");
-    } catch (java.io.UnsupportedEncodingException ex) {
-      throw new IllegalStateException(ex);
-    }
+  public static String encrypt(String plainText) throws Exception {
+    byte[] iv = new byte[GCM_IV_LENGTH];
+    RANDOM.nextBytes(iv);
+    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+    cipher.init(Cipher.ENCRYPT_MODE, ENCRYPTION_KEY, new GCMParameterSpec(GCM_TAG_BITS, iv));
+    byte[] cipherText = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
+    byte[] output = new byte[iv.length + cipherText.length];
+    System.arraycopy(iv, 0, output, 0, iv.length);
+    System.arraycopy(cipherText, 0, output, iv.length, cipherText.length);
+    return Base64.getEncoder().encodeToString(output);
   }
 
   /**
-   * XOR Function
+   * Decrypts and authenticates the supplied cipher text. The previous home made repeating key XOR
+   * cipher used the level result as its key, so submitting chosen cipher text revealed the key.
+   * AES-GCM with a random server key provides confidentiality and rejects forged or tampered cipher
+   * text instead of returning attacker controlled plain text.
    *
-   * @param input Byte array to be XOR'd
-   * @param key Encryption Key
-   * @return
+   * @param encoded Base64 encoded IV and cipher text
+   * @return The plain text revealed from the decryption
+   * @throws Exception If the cipher text is malformed or fails authentication
    */
-  private static byte[] xor(final byte[] input, String theKey) {
-    final byte[] output = new byte[input.length];
-    final byte[] secret = theKey.getBytes();
-    int spos = 0;
-    for (int pos = 0; pos < input.length; pos += 1) {
-      output[pos] = (byte) (input[pos] ^ secret[spos]);
-      spos += 1;
-      if (spos >= secret.length) {
-        spos = 0;
-      }
+  public static String decrypt(String encoded) throws Exception {
+    if (encoded == null) {
+      throw new IllegalArgumentException("No cipher text submitted");
     }
-    return output;
+    byte[] input = Base64.getDecoder().decode(encoded.trim());
+    if (input.length < GCM_IV_LENGTH + (GCM_TAG_BITS / 8)) {
+      throw new IllegalArgumentException("Cipher text too short");
+    }
+    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+    cipher.init(
+        Cipher.DECRYPT_MODE,
+        ENCRYPTION_KEY,
+        new GCMParameterSpec(GCM_TAG_BITS, input, 0, GCM_IV_LENGTH));
+    byte[] plain = cipher.doFinal(input, GCM_IV_LENGTH, input.length - GCM_IV_LENGTH);
+    return new String(plain, StandardCharsets.UTF_8);
+  }
+
+  private static SecretKey generateKey() {
+    try {
+      KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
+      keyGenerator.init(256, RANDOM);
+      return keyGenerator.generateKey();
+    } catch (Exception e) {
+      throw new IllegalStateException("Could not create encryption key", e);
+    }
   }
 }

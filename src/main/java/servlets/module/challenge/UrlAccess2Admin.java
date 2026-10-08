@@ -70,7 +70,15 @@ public class UrlAccess2Admin extends HttpServlet {
 
       try {
         String userData = request.getParameter("adminData");
-        boolean tamperedRequest = !userData.equalsIgnoreCase("youAreAnAdminOfAwesomenessWoopWoop");
+        // Authorisation check: this is an administrative function. Hiding it from the menu is not
+        // access control, so the caller must hold this level's administrator role, which is only
+        // ever granted server side. Unauthorised callers are refused.
+        boolean levelAdmin = Boolean.TRUE.equals(ses.getAttribute("urlAccess2LevelAdmin"));
+        if (!levelAdmin) {
+          log.error("Unauthorised call to admin function by " + ses.getAttribute("userName"));
+        }
+        boolean tamperedRequest =
+            !levelAdmin || !"youAreAnAdminOfAwesomenessWoopWoop".equalsIgnoreCase(userData);
         if (!tamperedRequest) {
           log.debug("No request tampering detected");
         } else {
@@ -95,7 +103,7 @@ public class UrlAccess2Admin extends HttpServlet {
         } else {
           htmlOutput =
               "<h2 class='title'>"
-                  + bundle.getString("response.failue")
+                  + bundle.getString("response.failure")
                   + "</h2>"
                   + "<p>"
                   + bundle.getString("response.failue.message")

@@ -6,8 +6,11 @@ import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.ResourceBundle;
+import java.util.Set;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -79,13 +82,27 @@ public class DirectObject2 extends HttpServlet {
         log.debug("Servlet root = " + ApplicationRoot);
         String htmlOutput = new String();
 
+        // Authorisation allowlist (fixes the insecure direct object reference). Only the profiles
+        // that are published in this level's user picker may be viewed. Trusting the client
+        // supplied identifier allowed any other row, including the hidden profile, to be read.
+        Set<String> allowedUserIds =
+            new HashSet<>(
+                Arrays.asList(
+                    "c81e728d9d4c2f636f067f89cc14862c",
+                    "eccbc87e4b5ce2fe28308fd9f2a7baf3",
+                    "e4da3b7fbbce2345d7772b0674a318d5",
+                    "8f14e45fceea167a5a36dedd4bea2543",
+                    "6512bd43d9caa6e02c990b0a82652dca"));
+        boolean authorised = userId != null && allowedUserIds.contains(userId);
+
         Connection conn =
             Database.getChallengeConnection(ApplicationRoot, "directObjectRefChalTwo");
         PreparedStatement prepstmt =
             conn.prepareStatement("SELECT userName, privateMessage FROM users WHERE userId = ?");
-        prepstmt.setString(1, userId);
+        // Query only an authorised reference; an empty string matches no profile
+        prepstmt.setString(1, authorised ? userId : "");
         ResultSet resultSet = prepstmt.executeQuery();
-        if (resultSet.next()) {
+        if (authorised && resultSet.next()) {
           log.debug("Found user: " + resultSet.getString(1));
           String userName = resultSet.getString(1);
           String privateMessage = resultSet.getString(2);

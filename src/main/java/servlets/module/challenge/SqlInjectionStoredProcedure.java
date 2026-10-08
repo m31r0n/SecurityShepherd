@@ -3,10 +3,10 @@ package servlets.module.challenge;
 import dbProcs.Database;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import javax.servlet.ServletException;
@@ -78,9 +78,11 @@ public class SqlInjectionStoredProcedure extends HttpServlet {
         log.debug("Getting Connection to Database");
         Connection conn =
             Database.getChallengeConnection(ApplicationRoot, "SqlChallengeStoredProc");
-        // CallableStatement callstmt = conn.prepareCall("CALL findUser('" + userIdentity + "');");
-        Statement stmt = conn.createStatement();
-        ResultSet resultSet = stmt.executeQuery("CALL findUser('" + userIdentity + "');");
+        // Bind the parameter to the stored procedure call instead of building the CALL statement
+        // from user input. A stored procedure is only safe when it is called with parameters.
+        CallableStatement callstmt = conn.prepareCall("{call findUser(?)}");
+        callstmt.setString(1, userIdentity);
+        ResultSet resultSet = callstmt.executeQuery();
 
         int i = 0;
         htmlOutput = "<h2 class='title'>" + bundle.getString("response.searchResults") + "</h2>";
@@ -89,20 +91,18 @@ public class SqlInjectionStoredProcedure extends HttpServlet {
                 + bundle.getString("response.table.name")
                 + "</th><th>"
                 + bundle.getString("response.table.address")
-                + "</th><th>"
-                + bundle.getString("response.table.comment")
                 + "</th></tr>";
 
         log.debug("Opening Result Set from query");
+        // Only public profile fields are returned by findUser. Customers' private comments are
+        // never part of a search result (they previously held confidential data).
         while (resultSet.next()) {
-          log.debug("Adding Customer " + resultSet.getString(2));
+          log.debug("Adding Customer " + resultSet.getString(1));
           htmlOutput +=
               "<tr><td>"
+                  + Encode.forHtml(resultSet.getString(1))
+                  + "</td><td>"
                   + Encode.forHtml(resultSet.getString(2))
-                  + "</td><td>"
-                  + Encode.forHtml(resultSet.getString(3))
-                  + "</td><td>"
-                  + Encode.forHtml(resultSet.getString(4))
                   + "</td></tr>";
           i++;
         }

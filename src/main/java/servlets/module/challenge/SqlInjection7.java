@@ -79,12 +79,12 @@ public class SqlInjection7 extends HttpServlet {
           Connection conn = Database.getChallengeConnection(applicationRoot, "SqlChallengeSeven");
           try {
             log.debug("Signing in with subitted details");
+            // Fully parameterised query: the email address was concatenated into the statement
             PreparedStatement prepstmt =
                 conn.prepareStatement(
-                    "SELECT userName FROM users WHERE userEmail = '"
-                        + subEmail
-                        + "' AND userPassword = ?;");
-            prepstmt.setString(1, subPassword);
+                    "SELECT userName FROM users WHERE userEmail = ? AND userPassword = ?");
+            prepstmt.setString(1, subEmail);
+            prepstmt.setString(2, subPassword);
             ResultSet users = prepstmt.executeQuery();
             if (users.next()) {
               htmlOutput =

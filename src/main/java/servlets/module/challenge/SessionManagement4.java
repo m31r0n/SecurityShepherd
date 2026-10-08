@@ -94,7 +94,13 @@ public class SessionManagement4 extends HttpServlet {
           decodedCookieBytes = Base64.decodeBase64(decodedCookie.getBytes());
           decodedCookie = new String(decodedCookieBytes, "UTF-8");
           log.debug("Decoded Cookie: " + decodedCookie);
-          if (decodedCookie.equals("0000000000000001")) // Guest Session
+          // Sub session identifiers are issued and stored server side. A sequential identifier
+          // supplied by the client is only accepted if it is the one issued to this session, so
+          // enumerating identifiers can no longer hijack another (admin) sub session.
+          String issuedSubSession = getIssuedSubSession(ses);
+          if (!decodedCookie.equals(issuedSubSession)) {
+            log.error("Sub session identifier does not belong to this session: " + decodedCookie);
+          } else if (decodedCookie.equals("0000000000000001")) // Guest Session
           {
             log.debug("Guest Session Detected");
           } else if (decodedCookie.equals("0000000000000009")) // Admin Session
@@ -161,5 +167,21 @@ public class SessionManagement4 extends HttpServlet {
       out.write(errors.getString("error.funky"));
       log.fatal(levelName + " - " + e.toString());
     }
+  }
+
+  /**
+   * Returns the sub session identifier issued to this session. Users are issued the guest sub
+   * session; it is stored server side so it can not be swapped by the client.
+   *
+   * @param ses The user's session
+   * @return The issued sub session identifier
+   */
+  private static String getIssuedSubSession(HttpSession ses) {
+    Object issued = ses.getAttribute("sessionManagement4SubSession");
+    if (issued == null) {
+      ses.setAttribute("sessionManagement4SubSession", "0000000000000001");
+      return "0000000000000001";
+    }
+    return issued.toString();
   }
 }
